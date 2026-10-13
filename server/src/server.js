@@ -15,6 +15,7 @@ try {
 
 const server = app.listen(env.PORT, () => {
   console.log(`\n🪐 Planet Ecosystem API running on http://localhost:${env.PORT} (${env.NODE_ENV})`)
+  if (env.NODE_ENV === 'production' && !env.SMTP_HOST) console.warn('⚠️  SMTP_HOST is not set: confirmation and password-reset emails will NOT be delivered.')
   if (env.NODE_ENV !== 'production') console.log(`   Dev email outbox: http://localhost:${env.PORT}/dev/outbox\n`)
 })
 

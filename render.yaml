@@ -1,0 +1,44 @@
+# Render Blueprint: one free web service that serves the API and the built React app.
+# Deploy: https://dashboard.render.com/blueprint/new → pick this repo.
+services:
+  - type: web
+    name: planet-ecosystem
+    runtime: node
+    plan: free
+    region: singapore
+    # --include=dev: Vite and Tailwind are devDependencies, needed to build the client.
+    buildCommand: npm ci --include=dev && npm run build
+    # Free plan has no shell or pre-deploy step, so migrations, the alpha admin and
+    # seed data are applied on start. All three are safe to run on every start.
+    startCommand: npm run db:setup && npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: 1
+      # Paste the "Internal Database URL" of your Render PostgreSQL (same region).
+      # The free plan allows only one free database, so it's created separately.
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      # 64 hex characters from `npm run secrets`. Back it up: NID numbers are encrypted with it.
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: ALPHA_ADMIN_EMAIL
+        sync: false
+      - key: ALPHA_ADMIN_PASSWORD
+        sync: false
+      # Email. Render's free plan blocks ports 25/465/587, so use a provider on port 2525
+      # (e.g. Brevo: smtp-relay.brevo.com). Without SMTP, new users can't confirm their email.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: 2525
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        sync: false

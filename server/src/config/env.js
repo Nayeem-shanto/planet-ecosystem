@@ -8,7 +8,8 @@ import { z } from 'zod'
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().default(4000),
-  APP_URL: z.url().default('http://localhost:5173'), // where users open the site (used in email links)
+  // Where users open the site (used in email links). Render sets RENDER_EXTERNAL_URL automatically.
+  APP_URL: z.url().default(process.env.RENDER_EXTERNAL_URL || 'http://localhost:5173'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters. Run: npm run secrets'),
   ENCRYPTION_KEY: z.string().regex(/^[0-9a-f]{64}$/i, 'ENCRYPTION_KEY must be 64 hex characters. Run: npm run secrets'),

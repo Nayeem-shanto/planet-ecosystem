@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch --env-file=.env src/server.js",
-       "start": "node --env-file-if-exists=.env src/server.js",
+    "start": "node --env-file-if-exists=.env src/server.js",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "node --env-file=.env scripts/migrate.js",
-    "db:seed": "node --env-file=.env scripts/seed.js",
-    "create-alpha": "node --env-file=.env scripts/create-alpha-admin.js",
+    "db:migrate": "node --env-file-if-exists=.env scripts/migrate.js",
+    "db:seed": "node --env-file-if-exists=.env scripts/seed.js",
+    "db:setup": "npm run db:migrate && node --env-file-if-exists=.env scripts/create-alpha-admin.js --if-missing && npm run db:seed",
+    "create-alpha": "node --env-file-if-exists=.env scripts/create-alpha-admin.js",
     "secrets": "node scripts/generate-secrets.js",
     "test:smoke": "node tests/smoke-test.js"
   },

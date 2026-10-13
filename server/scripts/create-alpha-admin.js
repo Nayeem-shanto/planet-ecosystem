@@ -7,7 +7,19 @@ import { hashPassword } from '../src/services/auth.js'
  * Creates (or resets the password of) the alpha admin account.
  * Reads ALPHA_ADMIN_NAME / ALPHA_ADMIN_EMAIL / ALPHA_ADMIN_PASSWORD from server/.env.
  * After running it, REMOVE ALPHA_ADMIN_PASSWORD from .env.
+ *
+ * With --if-missing (run on every deploy by `npm run db:setup`) it only creates
+ * the account when no alpha admin exists yet, and never resets a password.
  */
+if (process.argv.includes('--if-missing')) {
+  const [alpha] = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.role, 'alpha_admin')).limit(1)
+  if (alpha) {
+    console.log('ℹ️  Alpha admin already exists. Nothing changed.')
+    await pool.end()
+    process.exit(0)
+  }
+}
+
 const name = process.env.ALPHA_ADMIN_NAME?.trim() || 'Alpha Admin'
 const email = emailField.safeParse(process.env.ALPHA_ADMIN_EMAIL ?? '')
 const password = passwordField.safeParse(process.env.ALPHA_ADMIN_PASSWORD ?? '')
