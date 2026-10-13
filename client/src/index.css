@@ -1,0 +1,102 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: false;
+}
+
+/*
+ * Brand colours, sampled from the Planet logo:
+ *   purple  #54489C   gradient #6A5CA8 → #51449C
+ *   black   #0C0C0E
+ * Everything else is a soft, low-contrast neutral tinted toward that purple,
+ * which keeps long sessions easy on the eyes.
+ */
+@plugin "daisyui/theme" {
+  name: "planet";
+  default: true;
+  color-scheme: light;
+  --color-base-100: #ffffff;
+  --color-base-200: #f5f4fa;
+  --color-base-300: #e6e3f1;
+  --color-base-content: #1c1a26;
+  --color-primary: #54489c;
+  --color-primary-content: #ffffff;
+  --color-secondary: #6a5ca8;
+  --color-secondary-content: #ffffff;
+  --color-accent: #ece9f7;
+  --color-accent-content: #3f3480;
+  --color-neutral: #0c0c0e;
+  --color-neutral-content: #f4f3f8;
+  --color-info: #3b6fb6;
+  --color-info-content: #ffffff;
+  --color-success: #2e8b6a;
+  --color-success-content: #ffffff;
+  --color-warning: #c98a1b;
+  --color-warning-content: #ffffff;
+  --color-error: #c2414b;
+  --color-error-content: #ffffff;
+  --radius-selector: 0.5rem;
+  --radius-field: 0.625rem;
+  --radius-box: 1rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@plugin "daisyui/theme" {
+  name: "planet-dark";
+  color-scheme: dark;
+  --color-base-100: #1a1824;
+  --color-base-200: #13111b;
+  --color-base-300: #2c2939;
+  --color-base-content: #e7e5f0;
+  --color-primary: #6a5ca8;
+  --color-primary-content: #ffffff;
+  --color-secondary: #8b7fc6;
+  --color-secondary-content: #0c0c0e;
+  --color-accent: #2c2645;
+  --color-accent-content: #c9c2f0;
+  --color-neutral: #0c0c0e;
+  --color-neutral-content: #f4f3f8;
+  --color-info: #6b9be0;
+  --color-info-content: #0c0c0e;
+  --color-success: #4fb48d;
+  --color-success-content: #0c0c0e;
+  --color-warning: #e0aa48;
+  --color-warning-content: #0c0c0e;
+  --color-error: #e0707a;
+  --color-error-content: #0c0c0e;
+  --radius-selector: 0.5rem;
+  --radius-field: 0.625rem;
+  --radius-box: 1rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-brand: "Michroma", "Plus Jakarta Sans", ui-sans-serif, sans-serif;
+}
+
+body {
+  @apply bg-base-200 text-base-content antialiased;
+}
+h1, h2, h3 { letter-spacing: -0.02em; }
+
+.thin-scroll { scrollbar-width: thin; }
+
+/* Orbit animation on the sign-in screen: the one bold moment of the design */
+@keyframes orbit { to { transform: rotate(360deg); } }
+.orbit-spin { animation: orbit 40s linear infinite; transform-origin: center; transform-box: fill-box; }
+.orbit-spin-reverse { animation: orbit 60s linear infinite reverse; transform-origin: center; transform-box: fill-box; }
+@media (prefers-reduced-motion: reduce) {
+  .orbit-spin, .orbit-spin-reverse { animation: none; }
+}
+
+/* Print only the CV */
+@media print {
+  body * { visibility: hidden; }
+  .cv-print, .cv-print * { visibility: visible; }
+  .cv-print { position: absolute; inset: 0; box-shadow: none !important; border: 0 !important; }
+  @page { size: A4; margin: 12mm; }
+}

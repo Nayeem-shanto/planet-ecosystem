@@ -1,0 +1,38 @@
+{
+  "name": "@planet/client",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.9.1",
+    "@planet/shared": "^1.0.0",
+    "@tanstack/react-query": "^5.104.2",
+    "lucide-react": "^1.55.0",
+    "mammoth": "^1.13.0",
+    "pdfjs-dist": "5.4.624",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-hook-form": "^7.90.0",
+    "react-router-dom": "^7.18.4",
+    "recharts": "^3.10.1",
+    "sonner": "^2.0.8",
+    "tesseract.js": "^7.0.0",
+    "zod": "^4.6.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "daisyui": "^5.7.47",
+    "oxlint": "^1.81.0",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.0"
+  }
+}
