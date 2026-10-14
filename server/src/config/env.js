@@ -23,6 +23,9 @@ const schema = z.object({
   SMTP_SECURE: z.enum(['true', 'false']).default('false'),
   SMTP_USER: z.string().optional().default(''),
   SMTP_PASS: z.string().optional().default(''),
+  // Brevo HTTP API (port 443). Use on hosts that block SMTP ports, e.g. Render free tier.
+  // When set, it is used instead of SMTP.
+  BREVO_API_KEY: z.string().optional().default(''),
   MAIL_FROM: z.string().default('Planet Ecosystem Careers <no-reply@planet-ecosystem.local>'),
 })
 
