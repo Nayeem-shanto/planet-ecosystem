@@ -32,7 +32,7 @@ export default function AuthLayout({ children }) {
         <div className="absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-[#0C0C0E] via-[#0C0C0E]/90 to-transparent" />
         <div className="relative"><Logo inverse /></div>
         <div className="relative mt-auto max-w-md">
-          <h1 className="text-[44px] font-extrabold leading-[1.08]">Every career opportunity across Planet Ecosystem.</h1>
+          <h1 className="text-[44px] font-extrabold leading-[1.08]">Unlock your potential with every career opportunity across the Planet Ecosystem.</h1>
           <p className="mt-5 text-lg leading-relaxed text-white/70">
             Build your CV once, apply to any company in the group, and follow each application from submission to offer.
           </p>
