@@ -2,13 +2,13 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { and, eq } from 'drizzle-orm'
 import {
-  forgotPasswordSchema, generalRegisterSchema, loginSchema, passwordField, resetPasswordSchema, ROLE_LABELS, staffRegisterSchema,
+  forgotPasswordSchema, generalRegisterSchema, loginSchema, passwordField, resetPasswordSchema, ROLE_LABELS,
 } from '@planet/shared'
 import { db, schema } from '../db/index.js'
 import { authenticate, clearSessionCookie, setSessionCookie } from '../middleware/auth.js'
 import { emailLimiter, loginLimiter, registerLimiter } from '../middleware/rateLimit.js'
 import { validate } from '../middleware/validate.js'
-import { badRequest, forbidden, unauthorized } from '../lib/httpError.js'
+import { forbidden, unauthorized } from '../lib/httpError.js'
 import { audit } from '../lib/audit.js'
 import { activeUsersWithRole, notify } from '../lib/notify.js'
 import { sendMail } from '../lib/mailer.js'
@@ -41,37 +41,6 @@ router.post('/register/general', registerLimiter, validate(generalRegisterSchema
   await audit(req, 'user.registered', { entityType: 'user', entityId: user.id, details: { actorId: user.id, actorRole: 'general' } })
   res.status(201).json({
     message: 'Registration successful. We sent a confirmation link to your email. Confirm it, then sign in.',
-    email: user.email,
-  })
-})
-
-// Admins and super admins register here; the role comes from the URL.
-router.post('/register/:role', registerLimiter, async (req, res) => {
-  const role = req.params.role
-  if (!['admin', 'super_admin'].includes(role)) throw badRequest('Unknown registration type.')
-  const data = staffRegisterSchema.parse(req.body)
-  await assertUnique(data)
-
-  const [company] = await db.select().from(schema.companies).where(eq(schema.companies.id, data.companyId)).limit(1)
-  if (!company?.isActive) throw badRequest('Choose a valid company.', { fields: { companyId: 'Choose a valid company' } })
-
-  const [user] = await db.insert(schema.users).values({
-    role,
-    status: 'pending_verification',
-    name: data.name,
-    email: data.email,
-    phone: data.phone,
-    passwordHash: await hashPassword(data.password),
-    employeeId: data.employeeId,
-    designation: data.designation,
-    companyId: company.id,
-    ...sensitiveIdColumns('nid', data.idNumber),
-  }).returning()
-
-  await issueEmailToken(user, 'verify_email')
-  await audit(req, 'user.registered', { entityType: 'user', entityId: user.id, details: { actorId: user.id, actorRole: role } })
-  res.status(201).json({
-    message: `Registration received. Confirm your email, then the alpha admin will review your ${ROLE_LABELS[role]} account. We'll email you when it's approved.`,
     email: user.email,
   })
 })
@@ -127,16 +96,13 @@ const STATUS_MESSAGES = {
 }
 
 router.post('/login', loginLimiter, validate(loginSchema), async (req, res) => {
-  const { email, password, role } = req.body
+  const { email, password } = req.body
   const [user] = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1)
 
   const valid = user ? await verifyPassword(password, user.passwordHash) : await verifyAgainstDummy(password)
   if (!user || !valid) {
     await audit(req, 'auth.login_failed', { details: { email } })
     throw unauthorized('Email or password is incorrect.')
-  }
-  if (user.role !== role) {
-    throw forbidden(`This is a ${ROLE_LABELS[user.role]} account. Choose "${ROLE_LABELS[user.role]}" and sign in again.`, { code: 'WRONG_ROLE' })
   }
   if (user.status !== 'active') throw forbidden(STATUS_MESSAGES[user.status].message, { code: STATUS_MESSAGES[user.status].code })
 

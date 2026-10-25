@@ -75,7 +75,6 @@ export const staffRegisterSchema = confirmMatches(withIdRules(staffBase))
 export const loginSchema = z.object({
   email: emailField,
   password: z.string().min(1, 'Password is required'),
-  role: z.enum(['general', 'admin', 'super_admin', 'alpha_admin']),
 })
 
 export const forgotPasswordSchema = z.object({ email: emailField })

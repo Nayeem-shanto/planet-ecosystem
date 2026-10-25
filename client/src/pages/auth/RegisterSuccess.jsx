@@ -25,7 +25,7 @@ export default function RegisterSuccess() {
             </li>
           ))}
       </ol>
-      <Link to={`/login?role=${state.role}`} className="btn btn-primary btn-block mt-8">Continue to sign in</Link>
+      <Link to="/login" className="btn btn-primary btn-block mt-8">Continue to sign in</Link>
     </AuthLayout>
   )
 }

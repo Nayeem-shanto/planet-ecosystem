@@ -10,7 +10,7 @@ import { HOME_BY_ROLE } from '../../lib/roles'
 import Field from '../../components/ui/Field'
 import PasswordInput from './PasswordInput'
 
-export default function LoginForm({ role }) {
+export default function LoginForm() {
   const { login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -18,13 +18,13 @@ export default function LoginForm({ role }) {
 
   const { register, handleSubmit, getValues, formState: { errors, isSubmitting } } = useForm({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '', role },
+    defaultValues: { email: '', password: '' },
   })
 
   async function onSubmit(values) {
     setServerError(null)
     try {
-      const { user } = await login.mutateAsync({ ...values, role })
+      const { user } = await login.mutateAsync(values)
       const from = location.state?.from
       navigate(from?.startsWith(HOME_BY_ROLE[user.role]) ? from : HOME_BY_ROLE[user.role], { replace: true })
     } catch (err) {
