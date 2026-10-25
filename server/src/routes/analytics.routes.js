@@ -96,6 +96,48 @@ router.get('/overview', validate(rangeQuery, 'query'), async (req, res) => {
   })
 })
 
+/**
+ * Hiring results per company, all time: how many applied, how many were hired,
+ * and how long hiring takes (days from applying to the first "hired" event).
+ */
+router.get('/hiring', async (req, res) => {
+  const { rows: byCompany } = await db.execute(sql`
+    with hires as (
+      select application_id, min(created_at) as hired_at
+      from application_events where to_status = 'hired' group by application_id
+    )
+    select c.id, c.name,
+      count(a.id)::int as "applications",
+      count(a.id) filter (where a.status = 'hired')::int as "hired",
+      count(a.id) filter (where a.status = 'interview')::int as "interview",
+      round(avg(extract(epoch from h.hired_at - a.created_at) / 86400)::numeric, 1)::float8 as "avgDaysToHire",
+      (select count(*)::int from jobs j where j.company_id = c.id and j.status = 'published' and j.deadline > now()) as "openJobs"
+    from companies c
+    left join applications a on a.company_id = c.id
+    left join hires h on h.application_id = a.id and a.status = 'hired'
+    where c.is_active
+    group by c.id, c.name
+    order by "hired" desc, "applications" desc, c.name`)
+
+  const { rows: [totals] } = await db.execute(sql`
+    with hires as (
+      select application_id, min(created_at) as hired_at
+      from application_events where to_status = 'hired' group by application_id
+    )
+    select
+      count(a.id)::int as "applications",
+      count(distinct a.user_id)::int as "applicants",
+      count(a.id) filter (where a.status = 'hired')::int as "hired",
+      count(a.id) filter (where a.status = 'interview')::int as "interview",
+      count(h.application_id) filter (where h.hired_at > now() - interval '30 days')::int as "hiredLast30Days",
+      round(avg(extract(epoch from h.hired_at - a.created_at) / 86400)::numeric, 1)::float8 as "avgDaysToHire",
+      (select count(*)::int from jobs where status = 'published' and deadline > now()) as "openJobs"
+    from applications a
+    left join hires h on h.application_id = a.id and a.status = 'hired'`)
+
+  res.json({ totals, byCompany })
+})
+
 /* ---------------- Applicant log: every application as one row ---------------- */
 
 const logQuery = z.object({

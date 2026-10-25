@@ -111,7 +111,7 @@ router.get('/manage', requireRole(...STAFF_JOBS, 'alpha_admin'), validate(manage
     })
     .from(jobs)
     .innerJoin(companies, eq(jobs.companyId, companies.id))
-    .innerJoin(creator, eq(jobs.createdById, creator.id))
+    .leftJoin(creator, eq(jobs.createdById, creator.id))
     .where(and(
       status ? eq(jobs.status, status) : undefined,
       companyId ? eq(jobs.companyId, companyId) : undefined,
@@ -119,7 +119,7 @@ router.get('/manage', requireRole(...STAFF_JOBS, 'alpha_admin'), validate(manage
     ))
     .orderBy(desc(jobs.createdAt))
   res.json({
-    jobs: rows.map((r) => ({ ...r.job, company: publicCompany(r.company), createdByName: r.createdByName, applicationCount: r.applicationCount })),
+    jobs: rows.map((r) => ({ ...r.job, company: publicCompany(r.company), createdByName: r.createdByName ?? 'Removed staff', applicationCount: r.applicationCount })),
   })
 })
 
@@ -209,12 +209,12 @@ router.post('/:id/review', requireRole('super_admin'), validate(reviewSchema), a
   }).where(eq(jobs.id, job.id)).returning()
 
   await audit(req, approved ? 'job.approved' : 'job.rejected', { entityType: 'job', entityId: job.id, details: { title: job.title, note: req.body.note } })
-  const [creator] = await db.select().from(users).where(eq(users.id, job.createdById)).limit(1)
+  const [creator] = job.createdById ? await db.select().from(users).where(eq(users.id, job.createdById)).limit(1) : []
   await notify([creator], {
     title: approved ? `Published: ${job.title}` : `Not approved: ${job.title}`,
     body: req.body.note,
     link: '/admin/jobs',
-    email: templates.jobReviewed({ name: creator.name, jobTitle: job.title, approved, note: req.body.note }),
+    email: templates.jobReviewed({ name: creator?.name, jobTitle: job.title, approved, note: req.body.note }),
   })
   res.json({ job: updated })
 })

@@ -76,7 +76,8 @@ export const emailTokens = pgTable('email_tokens', {
 export const jobs = pgTable('jobs', {
   id: uuid('id').primaryKey().defaultRandom(),
   companyId: uuid('company_id').notNull().references(() => companies.id),
-  createdById: uuid('created_by_id').notNull().references(() => users.id),
+  // Null once the staff account that posted it has been removed.
+  createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
   title: text('title').notNull(),
   category: text('category').notNull(),
   type: text('type').notNull(),
@@ -93,7 +94,7 @@ export const jobs = pgTable('jobs', {
   benefits: jsonb('benefits').notNull().default(sql`'[]'::jsonb`),
   skills: jsonb('skills').notNull().default(sql`'[]'::jsonb`),
   status: jobStatus('status').notNull().default('pending_approval'),
-  reviewedById: uuid('reviewed_by_id').references(() => users.id),
+  reviewedById: uuid('reviewed_by_id').references(() => users.id, { onDelete: 'set null' }),
   reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
   reviewNote: text('review_note'),
   publishedAt: timestamp('published_at', { withTimezone: true }),
@@ -129,7 +130,7 @@ export const applications = pgTable('applications', {
 export const applicationEvents = pgTable('application_events', {
   id: uuid('id').primaryKey().defaultRandom(),
   applicationId: uuid('application_id').notNull().references(() => applications.id, { onDelete: 'cascade' }),
-  actorId: uuid('actor_id').references(() => users.id),
+  actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
   fromStatus: appStatus('from_status'),
   toStatus: appStatus('to_status').notNull(),
   note: text('note').notNull().default(''),
@@ -155,7 +156,7 @@ export const notifications = pgTable('notifications', {
 /** Who did what, and when. Never updated or deleted by the app. */
 export const auditLogs = pgTable('audit_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
-  actorId: uuid('actor_id').references(() => users.id),
+  actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
   actorRole: text('actor_role'),
   action: text('action').notNull(),
   entityType: text('entity_type'),

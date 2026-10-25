@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { and, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm'
-import { phoneField, ROLE_LABELS } from '@planet/shared'
+import { phoneField, ROLE_LABELS, staffRegisterSchema } from '@planet/shared'
 import { db, schema } from '../db/index.js'
 import { authenticate, requireRole } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
@@ -10,6 +10,7 @@ import { badRequest, notFound } from '../lib/httpError.js'
 import { notify } from '../lib/notify.js'
 import { sendMail } from '../lib/mailer.js'
 import { templates } from '../lib/emailTemplates.js'
+import { assertUnique, hashPassword, sensitiveIdColumns } from '../services/auth.js'
 import { loadPublicUser, toPublicUser } from '../services/users.js'
 
 const router = Router()
@@ -88,7 +89,8 @@ async function getStaffOrThrow(id) {
 async function nextStaffCode(tx, role) {
   const prefix = role === 'admin' ? 'ADM' : 'SAD'
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${prefix}))`)
-  const [{ n }] = await tx.select({ n: sql`count(*)::int` }).from(users).where(ilike(users.staffCode, `${prefix}-%`))
+  // Highest number + 1, not count + 1: removed accounts leave gaps, and a count would collide.
+  const [{ n }] = await tx.select({ n: sql`coalesce(max(substring(${users.staffCode} from 5)::int), 0)` }).from(users).where(ilike(users.staffCode, `${prefix}-%`))
   return `${prefix}-${String(n + 1).padStart(4, '0')}`
 }
 
@@ -141,6 +143,55 @@ router.post('/:id/reactivate', async (req, res) => {
   await audit(req, 'user.reactivated', { entityType: 'user', entityId: user.id, details: { name: user.name, role: user.role } })
   void sendMail({ to: updated.email, ...templates.accountReactivated({ name: updated.name }) })
   res.json({ user: toPublicUser(updated, company) })
+})
+
+/* ---------------- Alpha admin: create and remove staff ---------------- */
+
+// Super admins no longer self-register: the alpha admin creates them, already
+// approved, with a starting password the new super admin can change later.
+router.post('/super-admins', validate(staffRegisterSchema), async (req, res) => {
+  const data = req.body
+  await assertUnique(data)
+  const [company] = await db.select().from(companies).where(eq(companies.id, data.companyId)).limit(1)
+  if (!company?.isActive) throw badRequest('Choose a valid company.', { fields: { companyId: 'Choose a valid company' } })
+
+  const created = await db.transaction(async (tx) => {
+    const staffCode = await nextStaffCode(tx, 'super_admin')
+    const [row] = await tx.insert(users).values({
+      role: 'super_admin',
+      status: 'active',
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      passwordHash: await hashPassword(data.password),
+      employeeId: data.employeeId,
+      designation: data.designation,
+      companyId: company.id,
+      staffCode,
+      emailVerifiedAt: new Date(),
+      approvedById: req.user.id,
+      approvedAt: new Date(),
+      ...sensitiveIdColumns('nid', data.idNumber),
+    }).returning()
+    await audit(req, 'user.created', { entityType: 'user', entityId: row.id, details: { name: row.name, role: row.role, staffCode } }, tx)
+    return row
+  })
+
+  const roleLabel = ROLE_LABELS[created.role]
+  void sendMail({ to: created.email, ...templates.staffApproved({ name: created.name, roleLabel, staffCode: created.staffCode, companyName: company.name }) })
+  res.status(201).json({ user: toPublicUser(created, company) })
+})
+
+// Deletes the account for good. Jobs they posted and the history they left
+// stay; the database sets their author/actor to null (see schema.js).
+router.delete('/:id', async (req, res) => {
+  const { user } = await getStaffOrThrow(req.params.id)
+  if (!['admin', 'super_admin'].includes(user.role)) throw badRequest('Only admin and super admin accounts can be removed.')
+  await db.transaction(async (tx) => {
+    await audit(req, 'user.deleted', { entityType: 'user', entityId: user.id, details: { name: user.name, email: user.email, role: user.role, staffCode: user.staffCode } }, tx)
+    await tx.delete(users).where(eq(users.id, user.id))
+  })
+  res.json({ ok: true })
 })
 
 export default router

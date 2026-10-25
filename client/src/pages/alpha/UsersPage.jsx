@@ -33,9 +33,15 @@ export default function UsersPage() {
     onError: (err) => toast.error(err.message),
   })
 
+  const remove = useMutation({
+    mutationFn: (u) => api(`/users/${u.id}`, { method: 'DELETE' }),
+    onSuccess: (_, u) => { toast.success(`${u.name} was removed`); qc.invalidateQueries({ queryKey: ['users'] }) },
+    onError: (err) => toast.error(err.message),
+  })
+
   return (
     <div className="mx-auto max-w-7xl">
-      <PageHeader title="Users" description="Everyone with an account. Suspending someone signs them out immediately." />
+      <PageHeader title="Users" description="Everyone with an account. Suspending someone signs them out immediately; removing an admin or super admin deletes their account." />
       <div className="mb-4 flex flex-wrap gap-2">
         <label className="input input-sm w-full max-w-xs"><Search className="size-4 opacity-55" /><input type="search" placeholder="Name, email or staff ID" value={f.q} onChange={(e) => set('q', e.target.value)} /></label>
         <select className="select select-sm w-auto" value={f.role} onChange={(e) => set('role', e.target.value)} aria-label="Role"><option value="">All roles</option>{Object.entries(ROLE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
@@ -56,6 +62,7 @@ export default function UsersPage() {
                   <td className="text-right">
                     {u.id !== me.id && u.role !== 'alpha_admin' && u.status === 'active' && <button className="btn btn-ghost btn-xs text-error" onClick={() => confirm(`Suspend ${u.name}? They’ll be signed out immediately.`) && act.mutate({ u, verb: 'suspend' })}>Suspend</button>}
                     {u.status === 'suspended' && <button className="btn btn-ghost btn-xs" onClick={() => act.mutate({ u, verb: 'reactivate' })}>Reactivate</button>}
+                    {['admin', 'super_admin'].includes(u.role) && <button className="btn btn-ghost btn-xs text-error" disabled={remove.isPending} onClick={() => confirm(`Remove ${u.name} permanently? Their account is deleted and they can no longer sign in. Jobs they posted stay.`) && remove.mutate(u)}>Remove</button>}
                   </td>
                 </tr>
               ))}</tbody>

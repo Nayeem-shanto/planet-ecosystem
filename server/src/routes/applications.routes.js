@@ -249,7 +249,7 @@ router.post('/:id/status', requireRole('admin', 'super_admin'), validate(statusS
     const [recommendation] = await db.select({ actorId: applicationEvents.actorId }).from(applicationEvents)
       .where(and(eq(applicationEvents.applicationId, row.app.id), eq(applicationEvents.toStatus, 'recommended')))
       .orderBy(desc(applicationEvents.createdAt)).limit(1)
-    const [recommender] = recommendation ? await db.select().from(users).where(eq(users.id, recommendation.actorId)).limit(1) : []
+    const [recommender] = recommendation?.actorId ? await db.select().from(users).where(eq(users.id, recommendation.actorId)).limit(1) : []
     await notify([recommender], {
       title: to === 'interview' ? 'Recommendation approved' : 'Recommendation declined',
       body: `${row.candidate.name} for ${row.job.title}${note ? `: ${note}` : ''}`,
