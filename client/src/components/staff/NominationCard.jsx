@@ -9,7 +9,7 @@ export default function NominationCard({ user }) {
       <OrbitMark className="pointer-events-none absolute -right-8 -top-10 size-56 opacity-25" />
       <div className="relative flex flex-wrap items-center justify-between gap-6">
         <div>
-          <p className="flex items-center gap-2 text-sm text-white/65"><BadgeCheck className="size-4 text-[#8B7FC6]" /> Approved by alpha admin{user.approvedAt && ` on ${formatDate(user.approvedAt)}`}</p>
+          <p className="flex items-center gap-2 text-sm text-white/65"><BadgeCheck className="size-4 text-[#8B7FC6]" /> Approved{user.approvedAt && ` on ${formatDate(user.approvedAt)}`}</p>
           <h1 className="mt-2 text-2xl font-bold sm:text-3xl">You are nominated as {user.roleLabel} of {user.company?.name}</h1>
           <p className="mt-1 text-white/65">{user.designation}{user.employeeId && `, employee ID ${user.employeeId}`}</p>
         </div>

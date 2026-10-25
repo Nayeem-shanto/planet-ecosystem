@@ -6,7 +6,7 @@ import { db, schema } from '../db/index.js'
 import { authenticate, requireRole } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import { audit } from '../lib/audit.js'
-import { badRequest, notFound } from '../lib/httpError.js'
+import { badRequest, forbidden, notFound } from '../lib/httpError.js'
 import { notify } from '../lib/notify.js'
 import { sendMail } from '../lib/mailer.js'
 import { templates } from '../lib/emailTemplates.js'
@@ -38,7 +38,131 @@ router.patch('/me', validate(profileSchema), async (req, res) => {
   res.json({ user: await loadPublicUser(req.user.id) })
 })
 
-/* ---------------- Alpha admin: account management ---------------- */
+/* ---------------- Staff management: alpha admin and super admins ---------------- */
+
+// The alpha admin manages every account. A super admin manages only the
+// admins of their own company.
+const staffManagers = requireRole('alpha_admin', 'super_admin')
+
+function assertCanManage(actor, target) {
+  if (actor.role === 'alpha_admin') {
+    if (target.role === 'alpha_admin') throw badRequest('Alpha admin accounts cannot be changed here.')
+    return
+  }
+  if (target.role !== 'admin' || target.companyId !== actor.companyId) throw forbidden('You can only manage admins of your own company.')
+}
+
+async function getStaffOrThrow(id) {
+  const [row] = await db.select({ user: users, company: companies }).from(users)
+    .leftJoin(companies, eq(users.companyId, companies.id)).where(eq(users.id, id)).limit(1)
+  if (!row) throw notFound('User not found.')
+  return row
+}
+
+/**
+ * Staff IDs are sequential per role: ADM-0001, SAD-0001.
+ * Runs inside a transaction with an advisory lock so two approvals at the
+ * same moment can never receive the same number.
+ */
+async function nextStaffCode(tx, role) {
+  const prefix = role === 'admin' ? 'ADM' : 'SAD'
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${prefix}))`)
+  // Highest number + 1, not count + 1: removed accounts leave gaps, and a count would collide.
+  const [{ n }] = await tx.select({ n: sql`coalesce(max(substring(${users.staffCode} from 5)::int), 0)` }).from(users).where(ilike(users.staffCode, `${prefix}-%`))
+  return `${prefix}-${String(n + 1).padStart(4, '0')}`
+}
+
+/**
+ * Staff no longer self-register: a manager creates them, already approved,
+ * with a starting password they can change from their profile.
+ */
+async function createStaff(req, role, companyId) {
+  const data = req.body
+  await assertUnique(data)
+  const [company] = await db.select().from(companies).where(eq(companies.id, companyId)).limit(1)
+  if (!company?.isActive) throw badRequest('Choose a valid company.', { fields: { companyId: 'Choose a valid company' } })
+
+  const created = await db.transaction(async (tx) => {
+    const staffCode = await nextStaffCode(tx, role)
+    const [row] = await tx.insert(users).values({
+      role,
+      status: 'active',
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      passwordHash: await hashPassword(data.password),
+      employeeId: data.employeeId,
+      designation: data.designation,
+      companyId: company.id,
+      staffCode,
+      emailVerifiedAt: new Date(),
+      approvedById: req.user.id,
+      approvedAt: new Date(),
+      ...sensitiveIdColumns('nid', data.idNumber),
+    }).returning()
+    await audit(req, 'user.created', { entityType: 'user', entityId: row.id, details: { name: row.name, role: row.role, staffCode } }, tx)
+    return row
+  })
+
+  const roleLabel = ROLE_LABELS[created.role]
+  void sendMail({ to: created.email, ...templates.staffApproved({ name: created.name, roleLabel, staffCode: created.staffCode, companyName: company.name }) })
+  return toPublicUser(created, company)
+}
+
+router.post('/super-admins', requireRole('alpha_admin'), validate(staffRegisterSchema), async (req, res) => {
+  res.status(201).json({ user: await createStaff(req, 'super_admin', req.body.companyId) })
+})
+
+// A super admin's new admins always join the super admin's own company.
+router.post('/admins', staffManagers, validate(staffRegisterSchema), async (req, res) => {
+  const companyId = req.user.role === 'super_admin' ? req.user.companyId : req.body.companyId
+  res.status(201).json({ user: await createStaff(req, 'admin', companyId) })
+})
+
+/** A super admin's team: every admin of their company. */
+router.get('/team', requireRole('super_admin'), async (req, res) => {
+  const rows = await db.select({ user: users, company: companies }).from(users)
+    .leftJoin(companies, eq(users.companyId, companies.id))
+    .where(and(eq(users.role, 'admin'), eq(users.companyId, req.user.companyId)))
+    .orderBy(desc(users.createdAt))
+  res.json({ users: rows.map((r) => toPublicUser(r.user, r.company)) })
+})
+
+router.post('/:id/suspend', staffManagers, async (req, res) => {
+  const { user, company } = await getStaffOrThrow(req.params.id)
+  assertCanManage(req.user, user)
+  if (user.status !== 'active') throw badRequest('Only active accounts can be suspended.')
+  // tokenVersion + 1 signs them out immediately.
+  const [updated] = await db.update(users).set({ status: 'suspended', tokenVersion: user.tokenVersion + 1 }).where(eq(users.id, user.id)).returning()
+  await audit(req, 'user.suspended', { entityType: 'user', entityId: user.id, details: { name: user.name, role: user.role } })
+  void sendMail({ to: updated.email, ...templates.accountSuspended({ name: updated.name }) })
+  res.json({ user: toPublicUser(updated, company) })
+})
+
+router.post('/:id/reactivate', staffManagers, async (req, res) => {
+  const { user, company } = await getStaffOrThrow(req.params.id)
+  assertCanManage(req.user, user)
+  if (user.status !== 'suspended') throw badRequest('Only suspended accounts can be reactivated.')
+  const [updated] = await db.update(users).set({ status: 'active' }).where(eq(users.id, user.id)).returning()
+  await audit(req, 'user.reactivated', { entityType: 'user', entityId: user.id, details: { name: user.name, role: user.role } })
+  void sendMail({ to: updated.email, ...templates.accountReactivated({ name: updated.name }) })
+  res.json({ user: toPublicUser(updated, company) })
+})
+
+// Deletes the account for good. Jobs they posted and the history they left
+// stay; the database sets their author/actor to null (see schema.js).
+router.delete('/:id', staffManagers, async (req, res) => {
+  const { user } = await getStaffOrThrow(req.params.id)
+  assertCanManage(req.user, user)
+  if (!['admin', 'super_admin'].includes(user.role)) throw badRequest('Only admin and super admin accounts can be removed.')
+  await db.transaction(async (tx) => {
+    await audit(req, 'user.deleted', { entityType: 'user', entityId: user.id, details: { name: user.name, email: user.email, role: user.role, staffCode: user.staffCode } }, tx)
+    await tx.delete(users).where(eq(users.id, user.id))
+  })
+  res.json({ ok: true })
+})
+
+/* ---------------- Alpha admin only: all accounts and pending registrations ---------------- */
 
 router.use(requireRole('alpha_admin'))
 
@@ -74,26 +198,6 @@ router.get('/pending', async (req, res) => {
   res.json({ users: rows.map((r) => toPublicUser(r.user, r.company)) })
 })
 
-async function getStaffOrThrow(id) {
-  const [row] = await db.select({ user: users, company: companies }).from(users)
-    .leftJoin(companies, eq(users.companyId, companies.id)).where(eq(users.id, id)).limit(1)
-  if (!row) throw notFound('User not found.')
-  return row
-}
-
-/**
- * Staff IDs are sequential per role: ADM-0001, SAD-0001.
- * Runs inside a transaction with an advisory lock so two approvals at the
- * same moment can never receive the same number.
- */
-async function nextStaffCode(tx, role) {
-  const prefix = role === 'admin' ? 'ADM' : 'SAD'
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${prefix}))`)
-  // Highest number + 1, not count + 1: removed accounts leave gaps, and a count would collide.
-  const [{ n }] = await tx.select({ n: sql`coalesce(max(substring(${users.staffCode} from 5)::int), 0)` }).from(users).where(ilike(users.staffCode, `${prefix}-%`))
-  return `${prefix}-${String(n + 1).padStart(4, '0')}`
-}
-
 router.post('/:id/approve', async (req, res) => {
   const { user, company } = await getStaffOrThrow(req.params.id)
   if (user.status !== 'pending_approval') throw badRequest('This account is not waiting for approval.')
@@ -123,75 +227,6 @@ router.post('/:id/reject', validate(z.object({ reason: z.string().trim().min(3, 
   await audit(req, 'user.rejected', { entityType: 'user', entityId: user.id, details: { name: user.name, role: user.role, reason: req.body.reason } })
   void sendMail({ to: updated.email, ...templates.staffRejected({ name: updated.name, roleLabel: ROLE_LABELS[updated.role], reason: req.body.reason }) })
   res.json({ user: toPublicUser(updated, company) })
-})
-
-router.post('/:id/suspend', async (req, res) => {
-  const { user, company } = await getStaffOrThrow(req.params.id)
-  if (user.role === 'alpha_admin') throw badRequest('Alpha admin accounts cannot be suspended here.')
-  if (user.status !== 'active') throw badRequest('Only active accounts can be suspended.')
-  // tokenVersion + 1 signs them out immediately.
-  const [updated] = await db.update(users).set({ status: 'suspended', tokenVersion: user.tokenVersion + 1 }).where(eq(users.id, user.id)).returning()
-  await audit(req, 'user.suspended', { entityType: 'user', entityId: user.id, details: { name: user.name, role: user.role } })
-  void sendMail({ to: updated.email, ...templates.accountSuspended({ name: updated.name }) })
-  res.json({ user: toPublicUser(updated, company) })
-})
-
-router.post('/:id/reactivate', async (req, res) => {
-  const { user, company } = await getStaffOrThrow(req.params.id)
-  if (user.status !== 'suspended') throw badRequest('Only suspended accounts can be reactivated.')
-  const [updated] = await db.update(users).set({ status: 'active' }).where(eq(users.id, user.id)).returning()
-  await audit(req, 'user.reactivated', { entityType: 'user', entityId: user.id, details: { name: user.name, role: user.role } })
-  void sendMail({ to: updated.email, ...templates.accountReactivated({ name: updated.name }) })
-  res.json({ user: toPublicUser(updated, company) })
-})
-
-/* ---------------- Alpha admin: create and remove staff ---------------- */
-
-// Super admins no longer self-register: the alpha admin creates them, already
-// approved, with a starting password the new super admin can change later.
-router.post('/super-admins', validate(staffRegisterSchema), async (req, res) => {
-  const data = req.body
-  await assertUnique(data)
-  const [company] = await db.select().from(companies).where(eq(companies.id, data.companyId)).limit(1)
-  if (!company?.isActive) throw badRequest('Choose a valid company.', { fields: { companyId: 'Choose a valid company' } })
-
-  const created = await db.transaction(async (tx) => {
-    const staffCode = await nextStaffCode(tx, 'super_admin')
-    const [row] = await tx.insert(users).values({
-      role: 'super_admin',
-      status: 'active',
-      name: data.name,
-      email: data.email,
-      phone: data.phone,
-      passwordHash: await hashPassword(data.password),
-      employeeId: data.employeeId,
-      designation: data.designation,
-      companyId: company.id,
-      staffCode,
-      emailVerifiedAt: new Date(),
-      approvedById: req.user.id,
-      approvedAt: new Date(),
-      ...sensitiveIdColumns('nid', data.idNumber),
-    }).returning()
-    await audit(req, 'user.created', { entityType: 'user', entityId: row.id, details: { name: row.name, role: row.role, staffCode } }, tx)
-    return row
-  })
-
-  const roleLabel = ROLE_LABELS[created.role]
-  void sendMail({ to: created.email, ...templates.staffApproved({ name: created.name, roleLabel, staffCode: created.staffCode, companyName: company.name }) })
-  res.status(201).json({ user: toPublicUser(created, company) })
-})
-
-// Deletes the account for good. Jobs they posted and the history they left
-// stay; the database sets their author/actor to null (see schema.js).
-router.delete('/:id', async (req, res) => {
-  const { user } = await getStaffOrThrow(req.params.id)
-  if (!['admin', 'super_admin'].includes(user.role)) throw badRequest('Only admin and super admin accounts can be removed.')
-  await db.transaction(async (tx) => {
-    await audit(req, 'user.deleted', { entityType: 'user', entityId: user.id, details: { name: user.name, email: user.email, role: user.role, staffCode: user.staffCode } }, tx)
-    await tx.delete(users).where(eq(users.id, user.id))
-  })
-  res.json({ ok: true })
 })
 
 export default router

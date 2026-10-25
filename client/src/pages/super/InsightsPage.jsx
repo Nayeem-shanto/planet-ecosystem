@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { UserCog, UserPlus } from 'lucide-react'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useAuth } from '../../context/AuthContext'
 import { api } from '../../lib/api'
@@ -10,6 +11,8 @@ import PageHeader from '../../components/ui/PageHeader'
 import PageLoader from '../../components/ui/PageLoader'
 import ErrorState from '../../components/ui/ErrorState'
 import NominationCard from '../../components/staff/NominationCard'
+import StaffForm from '../../components/staff/StaffForm'
+import Modal from '../../components/ui/Modal'
 
 function Panel({ title, children, className = '' }) {
   return <section className={`rounded-box border border-base-300 bg-base-100 p-5 ${className}`}><h2 className="mb-4 font-bold">{title}</h2>{children}</section>
@@ -25,6 +28,14 @@ export default function InsightsPage() {
   const { user } = useAuth()
   const [days, setDays] = useState(90)
   const data = useQuery({ queryKey: ['analytics', days], queryFn: () => api(`/analytics/overview?days=${days}`) })
+  const isSuper = user.role === 'super_admin'
+  const qc = useQueryClient()
+  const [creating, setCreating] = useState(false)
+  const team = useQuery({ queryKey: ['team'], queryFn: () => api('/users/team'), enabled: isSuper })
+  const closeCreate = (created) => {
+    setCreating(false)
+    if (created) qc.invalidateQueries({ queryKey: ['team'] })
+  }
 
   if (data.isPending) return <PageLoader />
   if (data.isError) return <ErrorState error={data.error} onRetry={data.refetch} />
@@ -32,13 +43,26 @@ export default function InsightsPage() {
   const k = d.kpis
   const hasData = k.applications > 0
 
-  const todo = user.role === 'super_admin'
+  const todo = isSuper
     ? [['Job posts to approve', k.jobApprovals, '/super/job-approvals'], ['Recommendations to decide', k.recommendations, '/super/recommendations']]
     : [['Registrations to approve', k.registrations, '/alpha/registrations']]
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      {user.role === 'super_admin' && user.staffCode && <NominationCard user={user} />}
+      {isSuper && user.staffCode && <NominationCard user={user} />}
+      {isSuper && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <button onClick={() => setCreating(true)} className="rounded-box border border-base-300 bg-base-100 p-5 text-left hover:border-primary/40">
+            <UserPlus className="mb-3 size-6 text-primary" /><p className="font-semibold">Create admin</p><p className="mt-1 text-sm text-base-content/60">Add an admin to {user.company?.name}. The account is active right away.</p>
+          </button>
+          <Link to="/super/team" className="rounded-box border border-base-300 bg-base-100 p-5 hover:border-primary/40">
+            <UserCog className="mb-3 size-6 text-primary" /><p className="font-semibold">My admins{team.data && ` (${team.data.users.length})`}</p><p className="mt-1 text-sm text-base-content/60">Suspend, reactivate or remove the admins of your company.</p>
+          </Link>
+          <Modal open={creating} onClose={() => closeCreate()} title="Create admin">
+            <StaffForm role="admin" company={user.company} onDone={closeCreate} />
+          </Modal>
+        </div>
+      )}
       <PageHeader
         title="Hiring insights"
         description="Where people apply, what they expect to earn, and how the pipeline is moving."

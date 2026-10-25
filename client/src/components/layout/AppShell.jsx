@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   BarChart3, Briefcase, Building2, ClipboardCheck, FileText, Gauge, History, Inbox, LayoutDashboard, LogOut, Menu,
-  ScrollText, ShieldCheck, Sparkles, UserCircle, Users,
+  ScrollText, ShieldCheck, Sparkles, UserCircle, UserCog, Users,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import Logo from '../brand/Logo'
@@ -37,6 +37,7 @@ const NAV = {
       { to: '/applications', label: 'All applications', icon: Users },
       { to: '/jobs', label: 'Job posts', icon: Briefcase },
       { to: '/applicants', label: 'Applicant log', icon: ScrollText },
+      { to: '/team', label: 'My admins', icon: UserCog },
       { to: '/activity', label: 'Activity log', icon: History },
     ],
   },

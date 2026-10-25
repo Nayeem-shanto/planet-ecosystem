@@ -26,6 +26,7 @@ const NotificationsPage = lazy(() => import('./pages/shared/NotificationsPage'))
 const InsightsPage = lazy(() => import('./pages/super/InsightsPage'))
 const JobApprovalsPage = lazy(() => import('./pages/super/JobApprovalsPage'))
 const ApplicantLogPage = lazy(() => import('./pages/super/ApplicantLogPage'))
+const TeamPage = lazy(() => import('./pages/super/TeamPage'))
 const AlphaOverview = lazy(() => import('./pages/alpha/AlphaOverview'))
 const RegistrationsPage = lazy(() => import('./pages/alpha/RegistrationsPage'))
 const UsersPage = lazy(() => import('./pages/alpha/UsersPage'))
@@ -85,6 +86,7 @@ export default function App() {
               <Route path="applications" element={<StaffApplicationsPage title="All applications" />} />
               <Route path="jobs" element={<ManageJobsPage />} />
               <Route path="applicants" element={<ApplicantLogPage />} />
+              <Route path="team" element={<TeamPage />} />
               <Route path="activity" element={<ActivityLogPage />} />
               {common}
             </Route>

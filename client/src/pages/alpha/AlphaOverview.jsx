@@ -7,7 +7,7 @@ import { useAuth } from '../../context/AuthContext'
 import PageLoader from '../../components/ui/PageLoader'
 import Modal from '../../components/ui/Modal'
 import { OrbitMark } from '../../components/brand/Logo'
-import SuperAdminForm from './SuperAdminForm'
+import StaffForm from '../../components/staff/StaffForm'
 
 const count = (params) => ({ queryKey: ['users', { ...params, page: 1, count: true }], queryFn: () => api(`/users?pageSize=1&${new URLSearchParams(params)}`) })
 const rate = (hired, applied) => (applied ? `${Math.round((hired / applied) * 100)}%` : '-')
@@ -135,7 +135,7 @@ export default function AlphaOverview() {
       </div>
 
       <Modal open={creating} onClose={() => closeCreate()} title="Create super admin">
-        <SuperAdminForm onDone={closeCreate} />
+        <StaffForm role="super_admin" onDone={closeCreate} />
       </Modal>
     </div>
   )
